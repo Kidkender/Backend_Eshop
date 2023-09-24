@@ -5,7 +5,7 @@ const verifyAccessToken = require("../middlewares/verifyAccessToken");
 const router = express.Router();
 
 router.post("/signup", authController.signup);
-router.get("/login", authController.login);
+router.post("/login", authController.login);
 router.get("/loginEmail", authController.loginWithEmail);
 // router.post("/signin-with-custom-token", authController.signinWithCustomToken);
 router.get("/getInforUser", authController.getInforByEmail);

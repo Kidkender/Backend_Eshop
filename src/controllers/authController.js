@@ -6,6 +6,9 @@ const firebaseService = require("../services/firebaseService");
 async function signup(req, res) {
   try {
     const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ message: "Email or password invalid" });
+    }
     const userRecord = await firebaseService.createUser(email, password);
     console.log("Successfully created new user:", userRecord);
     res.status(200).json({ message: "User created successfully" });
@@ -140,13 +143,14 @@ async function revokeRefreshToken(req, res) {
 }
 
 async function login(req, res) {
-  const { email, password } = req.query;
+  const { email, password } = req.body;
 
   try {
-    const token = await firebaseService.Login(email, password);
-    console.log(token);
-    res.status(200).json({ message: "access token custom", token });
+    const inforUser = await firebaseService.Login(email, password);
+    // console.log();
+    res.status(200).json({ message: "access token custom", inforUser });
   } catch (error) {
+    console.error(error);
     res.status(500).json({ message: "Internal server error" });
   }
 }

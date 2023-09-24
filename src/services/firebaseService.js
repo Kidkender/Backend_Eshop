@@ -3,7 +3,6 @@ const {
   signInWithEmailAndPassword,
 } = require("firebase/auth");
 const jwt = require("jsonwebtoken");
-
 const { auth, getCheck } = require("./../firebase/config");
 
 const admin = require("firebase-admin");
@@ -99,12 +98,14 @@ async function Login(email, password) {
     )
       .then((userCredential) => {
         const user = userCredential.user;
-        return user.uid;
+        return user;
       })
-      .then((uid) => {
-        const token = createJWT(uid);
-        // console.log(token);
-        return token;
+      .then(async (user) => {
+        const { uid, refreshToken, displayName, email } = user;
+        // const infoUser = { uid, refreshToken, displayName, email };
+        const newToken = await createJWT(uid);
+        // console.log(newToken);
+        return { ...user, newToken };
       })
       .catch((error) => {
         console.error(error.message);
@@ -157,10 +158,48 @@ async function revokedRefreshToken(uid) {
   }
 }
 
-async function onIdTokenRevoke(email, pass) {
-  let password = prompt("Please provide your password for reauthentication");
+const SaveIDToken = (uid) => {
+  const metadataRef = getDatabase().ref("/metadata" + uid);
+  metadataRef.set({ revokeTime: utcRevocationTimeSecs }).then(() => {
+    console.log("Database updated successfully");
+  });
+};
 
-  // let credentials = await auth.currentUser.
+async function detectIdTokenRevoied(idToken) {
+  let checkRevoked = true;
+  try {
+    await admin
+      .auth()
+      .verifyIdToken(idToken, checkRevoked)
+      .then((payload) => {
+        return true;
+      })
+      .catch((error) => {
+        if (error.code == "auth/valid-token-revoked") {
+          return false;
+        }
+      });
+  } catch (error) {
+    console.error(error.message);
+    return;
+  }
+}
+
+async function onIdTokenRevoke(email, password) {
+  let credentials = await firebase.auth.EmailAuthProvider.credential(
+    firebase.auth().currentUser.email,
+    password
+  );
+  try {
+    const newToken = auth.currentUser
+      .reauthenticateWithCredential(credentials)
+      .then((result) => {
+        return result;
+      });
+    return newToken;
+  } catch (error) {
+    console.error(error.message);
+  }
 }
 
 async function createCustomToken(uid, expiresIn) {
@@ -179,6 +218,7 @@ async function createSessionLogin(accessToken) {
       .createSessionCookie(accessToken, { expiresIn })
       .then((sessionCokkie) => {
         const options = { maxAge: expiresIn, httpOnly: true, secure: true };
+        return options;
       });
     return newSession;
   } catch (error) {
@@ -197,4 +237,7 @@ module.exports = {
   createSessionLogin,
   revokedRefreshToken,
   Login,
+  onIdTokenRevoke,
+  SaveIDToken,
+  detectIdTokenRevoied,
 };

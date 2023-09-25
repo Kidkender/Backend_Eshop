@@ -1,9 +1,8 @@
 const { getAuth } = require("firebase/auth");
 const { initializeApp } = require("firebase/app");
-const { getAppCheck, AppCheck } = require("firebase-admin/app-check");
-const { appCheck } = require("firebase-admin");
-require("firebase/auth");
-
+const { getFirestore } = require("firebase/firestore");
+const { getStorage } = require("firebase/storage");
+const { getCheck } = require("firebase/app-check");
 const firebaseConfig = {
   apiKey: "AIzaSyCKhM7NlwKPJ6zdDtWt1lWBtmYQGAGT7vM",
   authDomain: "ecomerce-duck.firebaseapp.com",
@@ -15,7 +14,10 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
+
 const auth = getAuth(app);
 
-const getCheck = new AppCheck(app);
+const db = getFirestore(app);
+const storage = getStorage(app);
+
 module.exports = { app, auth, getCheck };

@@ -1,33 +1,22 @@
 const {
   signInWithCustomToken,
   signInWithEmailAndPassword,
+  sendPasswordResetEmail,
 } = require("firebase/auth");
+const { auth } = require("../firebase/config");
+const appAdmin = require("../firebase/adminConfig");
 const jwt = require("jsonwebtoken");
-const { auth, getCheck } = require("./../firebase/config");
-
-const admin = require("firebase-admin");
-const serviceAccount = require("../secret/ecomerce-duck-acba153957d4.json");
-const { private_key } = serviceAccount;
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-});
 
 async function createUser(email, password) {
-  const userRecord = await admin
+  const userRecord = await appAdmin.appAdmin
     .auth()
     .createUser({ email: email, password: password });
   return userRecord;
 }
-function checkPassword(pass) {
-  if (pass == "123123") {
-    return true;
-  }
-  return false;
-}
 
 async function checkVerity(token) {
   try {
-    const valid = await admin.appCheck().verifyToken(token);
+    const valid = await appAdmin.appAdmin.appCheck().verifyToken(token);
     return valid;
   } catch (error) {
     console.error(error.message);
@@ -36,20 +25,20 @@ async function checkVerity(token) {
 
 async function verifyAccessToken(token) {
   try {
-    const accessToken = await admin.auth().verifyAccessToken(body);
+    const accessToken = await appAdmin.appAdmin.auth().verifyIdToken(token);
     return accessToken;
   } catch (error) {
     console.error(error.message);
   }
 }
 
-async function loginWithEmail(email, password) {
+async function loginWithEmail(email) {
   const expirationTime = Math.floor(Date.now() / 1000) + 15 * 60;
   try {
     const inforUser = await getUserByEmail(email);
+    console.log(inforUser);
     const { uid } = inforUser;
-
-    if (uid && checkPassword(password)) {
+    if (uid) {
       const customToken = await createCustomToken(uid, { exp: expirationTime });
       return customToken;
     }
@@ -91,34 +80,50 @@ const createJWT = async (uid) => {
 
 async function Login(email, password) {
   try {
+    console.log(auth);
     const userCredentials = await signInWithEmailAndPassword(
       auth,
       email,
       password
-    )
-      .then((userCredential) => {
-        const user = userCredential.user;
-        return user;
-      })
-      .then(async (user) => {
-        const { uid, refreshToken, displayName, email } = user;
-        // const infoUser = { uid, refreshToken, displayName, email };
-        const newToken = await createJWT(uid);
-        // console.log(newToken);
-        return { ...user, newToken };
-      })
-      .catch((error) => {
-        console.error(error.message);
-      });
+    );
+    // .then((userCredential) => {
+    //   const user = userCredential.user;
+    //   return user;
+    // })
+    // .then(async (user) => {
+    //   const { uid, refreshToken, displayName, email } = user;
+    //   // const infoUser = { uid, refreshToken, displayName, email };
+    //   const newToken = await createJWT(uid);
+    //   return { ...user, newToken };
+    // })
+    // .catch((error) => {
+    //   console.error(error.message);
+    // });
     return userCredentials;
   } catch (error) {
     console.error(error.message);
   }
 }
 
+async function resetPasswd(email) {
+  try {
+    const result = await getUserByEmail(email);
+
+    if (result) {
+      sendPasswordResetEmail(auth, email);
+      return result.email;
+    }
+    console.log("User not exist");
+    return result;
+  } catch (error) {
+    console.error(error.message);
+    return false;
+  }
+}
+
 async function getUserByEmail(email) {
   try {
-    const inforUser = await admin.auth().getUserByEmail(email);
+    const inforUser = await appAdmin.appAdmin.auth().getUserByEmail(email);
     // console.log(inforUser.passwordHash);
     return inforUser;
   } catch (error) {
@@ -203,27 +208,22 @@ async function onIdTokenRevoke(email, password) {
 }
 
 async function createCustomToken(uid, expiresIn) {
-  const customToken = await admin
+  const customToken = await appAdmin.appAdmin
     .auth()
     .createCustomToken(uid, { expiresIn: expiresIn });
   return customToken;
 }
 
-async function createSessionLogin(accessToken) {
+async function createSessionLogin(idToken) {
   const expiresIn = 60 * 60 * 24 * 1000;
 
-  try {
-    const newSession = await admin
-      .auth()
-      .createSessionCookie(accessToken, { expiresIn })
-      .then((sessionCokkie) => {
-        const options = { maxAge: expiresIn, httpOnly: true, secure: true };
-        return options;
-      });
-    return newSession;
-  } catch (error) {
-    console.error(error.message);
-  }
+  return (newSession = await appAdmin.appAdmin
+    .auth()
+    .createSessionCookie(idToken, { expiresIn: expiresIn })
+    .then((sessionCookie) => {
+      const options = { maxAge: sessionCookie, httpOnly: true, secure: true };
+      return { ...sessionCookie, options };
+    }));
 }
 
 module.exports = {
@@ -240,4 +240,6 @@ module.exports = {
   onIdTokenRevoke,
   SaveIDToken,
   detectIdTokenRevoied,
+  resetPasswd,
+  createJWT,
 };

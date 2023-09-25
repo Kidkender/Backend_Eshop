@@ -14,7 +14,26 @@ async function signup(req, res) {
     res.status(200).json({ message: "User created successfully" });
   } catch (error) {
     console.error("Error creating new user:", error);
-    res.status(500).json({ message: "Internal server error", error });
+    res.status(500).json({ message: error.message });
+  }
+}
+
+async function resetPassword(req, res) {
+  const { email } = req.body;
+  console.log(email);
+  if (!email) {
+    return res.status(401).json({ message: "Email invalid" });
+  }
+  try {
+    const userRecord = await firebaseService.resetPasswd(email);
+    console.log("infor", userRecord);
+    return userRecord
+      ? res
+          .status(200)
+          .json({ message: "Send mail reset password successfully" })
+      : res.status(401).json({ message: "User is not exist" });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 }
 
@@ -57,7 +76,10 @@ async function LoginwithCustomToken(req, res) {
   try {
     const { customToken } = req.body;
     const userCredential = await firebaseService.loginCustomToken(customToken);
-    res.status(200).json({ message: userCredential });
+
+    return userCredential
+      ? res.status(200).json({ message: userCredential })
+      : res.status(403).json({ message: "Token invalid" });
   } catch (error) {
     console.error("Custom token sign-in error:", error);
     res.status(500).json({ message: "Internal server error" });
@@ -144,27 +166,34 @@ async function revokeRefreshToken(req, res) {
 
 async function login(req, res) {
   const { email, password } = req.body;
+  console.log(email, password);
+  if (email ?? password) {
+    res.status(403).json({ message: "Email or password invalid" });
+  }
 
   try {
     const inforUser = await firebaseService.Login(email, password);
-    // console.log();
-    res.status(200).json({ message: "access token custom", inforUser });
+    if (inforUser) {
+      res.status(200).json({ message: "access token custom", inforUser });
+    }
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Internal server error" });
+    res.status(500).json({ message: error.message });
   }
 }
 
 async function createSessionLogin(req, res) {
-  const idToken = req.body.idToken.toString();
-  const csrfToken = req.body.csrfToken.toString();
+  const idToken = req.body.idToken;
+  const csrfToken = req.body.csrfToken;
 
   if (csrfToken !== req.cookies.csrfToken) {
     res.status(401).send("UNAUTHORIZED REQUEST !");
   }
 
   try {
-    const options = await firebaseService.createSessionLogin(idToken);
+    const { options, sessionCookie } = await firebaseService.createSessionLogin(
+      idToken
+    );
     res.cookies("session", sessionCookie, options);
     res.end(JSON.stringify({ status: "success" }));
   } catch (error) {
@@ -176,7 +205,6 @@ module.exports = {
   signup,
   login,
   loginWithEmail,
-  // signinWithCustomToken,
   getInforByEmail,
   createToken,
   LoginwithCustomToken,
@@ -185,4 +213,5 @@ module.exports = {
   createSessionLogin,
   revokeRefreshToken,
   createJWT,
+  resetPassword,
 };

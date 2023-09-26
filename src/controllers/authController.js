@@ -41,7 +41,6 @@ async function getInforByEmail(req, res) {
   try {
     const { email } = req.body;
     const inforUser = await firebaseService.getUserByEmail(email);
-    // console.log(inforUser);
     res.status(200).json({ message: inforUser });
   } catch (error) {
     console.error("Error get information", error);
@@ -103,7 +102,8 @@ function createJWT(req, res) {
   }
   try {
     const payload = {
-      aud: "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit",
+      // aud: "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit",
+      aud: "projects/ecomerce-duck",
       iat: currentTimestamp,
       exp: currentTimestamp + 15 * 60,
       iss: "firebase-adminsdk-gqxx7@ecomerce-duck.iam.gserviceaccount.com",
@@ -144,6 +144,7 @@ async function createToken(req, res) {
 
 async function verifyTokenId(req, res) {
   const { token } = req.body;
+  console.log("token", token);
   try {
     const validToken = await firebaseService.verifyAccessToken(token);
     res.status(200).json({ message: validToken });
@@ -155,49 +156,67 @@ async function verifyTokenId(req, res) {
 
 async function revokeRefreshToken(req, res) {
   const { uid } = req.body;
+  if (!uid) {
+    res.status(404).json({ message: "UID invalid" });
+  }
   try {
     const refresh = await firebaseService.revokedRefreshToken(uid);
-    res.status(200).json({ message: refresh });
+    return refresh
+      ? res.status(200).json({ message: refresh })
+      : res
+          .status(403)
+          .json({ message: "Have a error in process revoke refresh token" });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Internal server error" });
   }
 }
-
 async function login(req, res) {
   const { email, password } = req.body;
-  console.log(email, password);
-  if (email ?? password) {
+
+  if (!email || !password) {
     res.status(403).json({ message: "Email or password invalid" });
   }
 
   try {
-    const inforUser = await firebaseService.Login(email, password);
-    if (inforUser) {
-      res.status(200).json({ message: "access token custom", inforUser });
-    }
+    const token = await firebaseService.Login(email, password);
+    console.log(token);
+    return token === "Password invalid"
+      ? res.status(403).json({ message: token })
+      : res.status(200).json({ message: "access token custom", token });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ message: "Internal server error" });
   }
 }
 
 async function createSessionLogin(req, res) {
   const idToken = req.body.idToken;
-  const csrfToken = req.body.csrfToken;
+  // const csrfToken = req.body.csrfToken;
 
-  if (csrfToken !== req.cookies.csrfToken) {
-    res.status(401).send("UNAUTHORIZED REQUEST !");
-  }
-
+  // if (csrfToken !== req.cookies.csrfToken) {
+  //   res.status(401).send("UNAUTHORIZED REQUEST !");
+  // }
   try {
-    const { options, sessionCookie } = await firebaseService.createSessionLogin(
+    const { sessionCookie, options } = await firebaseService.createSessionLogin(
       idToken
     );
-    res.cookies("session", sessionCookie, options);
-    res.end(JSON.stringify({ status: "success" }));
+    console.log("session Cookie", sessionCookie);
+    res.end(JSON.stringify({ status: "success", cookies: options }));
   } catch (error) {
     res.status(401).send("UNAUTHORIZED REQUEST");
+    console.log(error);
+  }
+}
+
+async function BlockUser(req, res) {
+  const { email } = req.body;
+  try {
+    const result = await firebaseService.BlockUser(email);
+    return result
+      ? res.status(200).json({ message: "User is block in 30 minutes" })
+      : res.status(403).json({ message: "Have a error" });
+  } catch (error) {
+    res.status(500).json({ message: "Internal server error" });
   }
 }
 
@@ -214,4 +233,5 @@ module.exports = {
   revokeRefreshToken,
   createJWT,
   resetPassword,
+  BlockUser,
 };

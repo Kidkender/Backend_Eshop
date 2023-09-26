@@ -1,5 +1,6 @@
 const admin = require("firebase-admin");
 
+const appAdmin = require("../firebase/adminConfig");
 async function verifyAccessToken(req, res, next) {
   try {
     const accessToken = req.headers["authorization"];

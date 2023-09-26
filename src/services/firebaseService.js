@@ -4,11 +4,12 @@ const {
   sendPasswordResetEmail,
 } = require("firebase/auth");
 const { auth } = require("../firebase/config");
-const appAdmin = require("../firebase/adminConfig");
+const { appAdmin, private_key, authAdmin } = require("../firebase/adminConfig");
 const jwt = require("jsonwebtoken");
+const { app } = require("firebase-admin");
 
 async function createUser(email, password) {
-  const userRecord = await appAdmin.appAdmin
+  const userRecord = await appAdmin
     .auth()
     .createUser({ email: email, password: password });
   return userRecord;
@@ -16,7 +17,7 @@ async function createUser(email, password) {
 
 async function checkVerity(token) {
   try {
-    const valid = await appAdmin.appAdmin.appCheck().verifyToken(token);
+    const valid = await appAdmin.appCheck().verifyToken(token);
     return valid;
   } catch (error) {
     console.error(error.message);
@@ -25,7 +26,7 @@ async function checkVerity(token) {
 
 async function verifyAccessToken(token) {
   try {
-    const accessToken = await appAdmin.appAdmin.auth().verifyIdToken(token);
+    const accessToken = await appAdmin.auth().verifyIdToken(token);
     return accessToken;
   } catch (error) {
     console.error(error.message);
@@ -57,6 +58,7 @@ const createJWT = async (uid) => {
   try {
     const payload = {
       aud: "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit",
+      // aud: "projects/ecomerce-duck",
       iat: currentTimestamp,
       exp: currentTimestamp + 15 * 60,
       iss: firebase_email_admin,
@@ -80,28 +82,29 @@ const createJWT = async (uid) => {
 
 async function Login(email, password) {
   try {
-    console.log(auth);
     const userCredentials = await signInWithEmailAndPassword(
       auth,
       email,
       password
-    );
-    // .then((userCredential) => {
-    //   const user = userCredential.user;
-    //   return user;
-    // })
-    // .then(async (user) => {
-    //   const { uid, refreshToken, displayName, email } = user;
-    //   // const infoUser = { uid, refreshToken, displayName, email };
-    //   const newToken = await createJWT(uid);
-    //   return { ...user, newToken };
-    // })
-    // .catch((error) => {
-    //   console.error(error.message);
-    // });
+    )
+      .then((userCredential) => {
+        const user = userCredential.user;
+        return user;
+      })
+      .then(async (user) => {
+        const { uid, refreshToken, displayName, email } = user;
+
+        const token = await createJWT(uid);
+        return { displayName, email, refreshToken, token };
+      })
+      .catch((error) => {
+        console.log("Password invalid");
+        console.error(error);
+        return "Password invalid";
+      });
     return userCredentials;
   } catch (error) {
-    console.error(error.message);
+    console.error(error);
   }
 }
 
@@ -123,8 +126,8 @@ async function resetPasswd(email) {
 
 async function getUserByEmail(email) {
   try {
-    const inforUser = await appAdmin.appAdmin.auth().getUserByEmail(email);
-    // console.log(inforUser.passwordHash);
+    const inforUser = await appAdmin.auth().getUserByEmail(email);
+    console.log(inforUser);
     return inforUser;
   } catch (error) {
     console.error(error.message);
@@ -141,22 +144,25 @@ async function loginCustomToken(customToken) {
 }
 
 async function revokedRefreshToken(uid) {
+  let status = false;
   try {
-    const validRefresh = await admin
+    const validRefresh = await appAdmin
       .auth()
       .revokeRefreshTokens(uid)
       .then(() => {
-        return admin.auth().getUser(uid);
+        return appAdmin.auth().getUser(uid);
       })
       .then((userRecord) => {
         return new Date(userRecord.tokensValidAfterTime).getTime() / 1000;
       })
       .then((timestamp) => {
         console.log(`Token revoked at ${timestamp}`);
+        return (status = true);
       })
       .catch((error) => {
         console.error(error.message);
       });
+    console.log(status);
     return validRefresh;
   } catch (error) {
     console.error(error.message);
@@ -208,25 +214,64 @@ async function onIdTokenRevoke(email, password) {
 }
 
 async function createCustomToken(uid, expiresIn) {
-  const customToken = await appAdmin.appAdmin
-    .auth()
-    .createCustomToken(uid, { expiresIn: expiresIn });
-  return customToken;
+  try {
+    const customToken = await appAdmin
+      .auth()
+      .createCustomToken(uid, { expiresIn: expiresIn });
+    return customToken;
+  } catch (error) {
+    console.error(error.message);
+  }
 }
+
+// appAdmin.auth().createSessionCookie();
 
 async function createSessionLogin(idToken) {
   const expiresIn = 60 * 60 * 24 * 1000;
 
-  return (newSession = await appAdmin.appAdmin
+  const result = await appAdmin
     .auth()
     .createSessionCookie(idToken, { expiresIn: expiresIn })
-    .then((sessionCookie) => {
+    .then(async (sessionCookie) => {
       const options = { maxAge: sessionCookie, httpOnly: true, secure: true };
-      return { ...sessionCookie, options };
-    }));
+      console.log("session cookie created", sessionCookie);
+      console.log("options", options);
+      return { sessionCookie, options };
+    });
+  return result;
+}
+
+async function BlockUser(email) {
+  const blockedUntil = Date.now() + 30 * 60 * 1000;
+  try {
+    const result = await appAdmin
+      .auth()
+      .getUserByEmail(email)
+      .then((user) => {
+        return user.uid;
+      })
+      .then(async (uid) => {
+        await appAdmin
+          .auth()
+          .setCustomUserClaims(uid, { blocked: true })
+          .then(() => {
+            console.log("User blocked successfully");
+            return true;
+          })
+          .catch((error) => {
+            console.error("Error when block user", error);
+            return false;
+          });
+      });
+    return result;
+  } catch (error) {
+    console.log(error.message);
+    return false;
+  }
 }
 
 module.exports = {
+  BlockUser,
   createUser,
   loginWithEmail,
   loginCustomToken,
